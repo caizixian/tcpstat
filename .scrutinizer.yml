@@ -14,7 +14,7 @@ build:
             - pip install -r requirements.txt
     tests:
         override:
-            - chmod +x tcpstat.py && chmod +x tests.py && ./tests.py
+            - chmod +x tcpstat.py && chmod +x tests.py && sudo PATH=$PATH python ./tests.py
 
 checks:
     python:
