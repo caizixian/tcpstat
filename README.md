@@ -16,6 +16,8 @@ sudo apt-get install -y mongodb python-pip python-dev build-essential
 sudo pip install -r /vagrant/requirements.txt
 ```
 
+[How to secure my MongoDB?][3]
+
 ## Developing:
 
 * Download Vagrant box at https://cloud-images.ubuntu.com/vagrant/trusty/current/trusty-server-cloudimg-i386-vagrant-disk1.box
@@ -44,3 +46,4 @@ MIT
 
 [1]:https://github.com/caizixian/tcpstat/wiki
 [2]:https://github.com/caizixian/tcpstat/issues
+[3]:https://docs.mongodb.org/manual/administration/security/
