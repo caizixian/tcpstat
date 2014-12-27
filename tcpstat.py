@@ -23,13 +23,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-__author__ = 'Ivan Cai'
-__version__ = '0.0.1'
 from __future__ import absolute_import, division, print_function, with_statement
 import os
 import sys
 import argparse
 import logging
+
+__author__ = 'Ivan Cai'
+__version__ = '0.0.1'
 
 # The ConfigParser module has been renamed to configparser in Python 3.
 try:
@@ -77,7 +78,7 @@ def check_config(path):
         sys.exit("Config file doesn't exist.")
     else:
         pass
-        #TODO
+        # TODO
 
 
 def main():
