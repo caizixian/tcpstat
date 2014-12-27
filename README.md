@@ -8,11 +8,20 @@ A TCP port traffic monitor written in Python.
 * PyMongo: a native Python driver for MongoDB.
 * python-iptables: Python bindings for iptables.
 
+## Install dependencies:
+
+```
+sudo apt-get update
+sudo apt-get install -y mongodb python-pip python-dev build-essential
+sudo pip install -r /vagrant/requirements.txt
+```
+
 ## Developing:
 
 * Download Vagrant box at https://cloud-images.ubuntu.com/vagrant/trusty/current/trusty-server-cloudimg-i386-vagrant-disk1.box
 * `vagrant box add ubuntu/trusty32 trusty-server-cloudimg-i386-vagrant-disk1.box`
 * `vagrant up`
+* `vagrant provision`
 
 ## Install
 
