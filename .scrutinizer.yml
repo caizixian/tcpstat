@@ -11,7 +11,9 @@ build:
         memcached: false
     dependencies:
         before:
-            - pip install -r requirements.txt
+            - sudo apt-get update
+            - sudo apt-get install -y mongodb python-pip python-dev build-essential
+            - sudo pip install -r requirements.txt
     tests:
         override:
             - chmod +x tcpstat.py && chmod +x tests.py && sudo PATH=$PATH python ./tests.py
