@@ -64,16 +64,21 @@ def init():
 
 
 def find_config(args):
-    if args.config == None:
-        os.path.exists("/etc/tcpstat/config"):
-        configfile_path = "/etc/tcpstat/config"
+    if args.config == None and os.path.exists("/etc/tcpstat/config"):
+        return "/etc/tcpstat/config"
     elif os.path.exists(args.config):
-        configfile_path = args.config
+        return args.config
     else:
-        sys.exit("Config file doesn't exist.")
+        return None
 
-def read_config():
-    pass
+
+def check_config(path):
+    if path == None:
+        sys.exit("Config file doesn't exist.")
+    else:
+        pass
+        #TODO
+
 
 def main():
     check_python()
@@ -96,7 +101,7 @@ def main():
         print(__version__)
 
     if args.init:
-        find_config(args)
+        check_config(find_config(args))
         init()
 
 if __name__ == "__main__":
