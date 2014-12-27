@@ -2,6 +2,8 @@
 
 A TCP port traffic monitor written in Python.
 [![Scrutinizer Code Quality](https://scrutinizer-ci.com/g/caizixian/tcpstat/badges/quality-score.png?b=master)](https://scrutinizer-ci.com/g/caizixian/tcpstat/?branch=master)
+[![Build Status](https://scrutinizer-ci.com/g/caizixian/tcpstat/badges/build.png?b=master)](https://scrutinizer-ci.com/g/caizixian/tcpstat/build-status/master)
+
 ## Dependencies:
 
 * MongoDB: an open-source document database.

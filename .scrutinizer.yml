@@ -1,0 +1,18 @@
+build:
+    environment:
+        python: 2.7.7
+    dependencies:
+        before:
+            - pip install -r requirements.txt
+    tests:
+        override:
+            - ./tests.py
+
+checks:
+    python:
+        code_rating: true
+        duplicate_code: true
+
+filter:
+    excluded_paths:
+        - './tests.py'
