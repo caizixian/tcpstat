@@ -1,0 +1,10 @@
+[Groups]
+Name:Gp1,Gp2
+
+[Gp1]
+Port:80,8080-8081
+Webhook:http://localhost/api/v1/http_bandwidth
+
+[Gp2]
+Port:443
+Webhook:http://localhost/api/v1/https_bandwidth

@@ -69,13 +69,25 @@ def check_root():
 
 
 def init(group_list):
+    """Create init iptables rules"""
     with open("/etc/tcpstat.sh", "w") as iptables_init_script:
+        # Set shebang
+        iptables_init_script.write("#!/bin/bash\n")
+        # Create new chain for security reason
+        iptables_init_script.write("/sbin/iptables -N ACCT\n")
+        # Flush existing rules in our custom chain
+        iptables_init_script.write("/sbin/iptables -F ACCT\n")
+        # Attach new chain
+        iptables_init_script.write("/sbin/iptables -A FORWARD -j ACCT\n")
+        iptables_init_script.write("/sbin/iptables -A INPUT -j ACCT\n")
+        iptables_init_script.write("/sbin/iptables -A OUTPUT -j ACCT\n")
         for group in group_list:
             for port in group["Port"]:
                 iptables_init_script.write(
-                    "/sbin/iptables -A INPUT -p tcp --dport " + str(port) + "\n")
+                    "/sbin/iptables -A ACCT -p tcp --dport " + str(port) + "\n")
                 iptables_init_script.write(
-                    "/sbin/iptables -A OUTPUT -p tcp --sport " + str(port) + "\n")
+                    "/sbin/iptables -A ACCT -p tcp --sport " + str(port) + "\n")
+    os.system("chmod +x /etc/tcpstat.sh")
 
 
 def find_config(args):
@@ -152,67 +164,76 @@ def update_db(group_list):
 
     logging.info("Connect to db")
 
-    chain = iptc.Chain(table, 'OUTPUT')
+    chain = iptc.Chain(table, 'ACCT')
     for group in group_list:
-        entry = collection.find_one({"Name": group["Name"], "Time": today_str})
-        if entry:
-            entry_status = True  # Entry exists
-            logging.info("Find an existing entry.")
-        else:
-            entry_status = False  # Entry doesn't exists
-            logging.info("Doesn't find an existing entry.")
         for rule in chain.rules:
             for match in rule.matches:
-                # Fetch entries in db and then modify data
-                if entry_status:
-                    port_number = str(match.sport)
-                    # In bytes
-                    TX = rule.get_counters()[1] + entry[port_number]["TX"]
-                    RX = entry[port_number]["RX"]
-
-                    collection.update({"Name": group["Name"],
-                                       "Time": today_str},
-                                      {"$set":
-                                       {port_number: {"TX": TX, "RX": RX}}
-                                       })
-                else:
-                    port_number = str(match.sport)
-                    TX = rule.get_counters()[1]
-                    RX = 0
-                    collection.insert({"Name": group["Name"],
-                                       "Time": today_str,
-                                       port_number: {"TX": TX, "RX": RX}
-                                       })
-
-    chain = iptc.Chain(table, 'INPUT')
-    for group in group_list:
-        entry = collection.find_one({"Name": group["Name"], "Time": today_str})
-        if entry:
-            entry_status = True  # Entry exists
-        else:
-            entry_status = False  # Entry doesn't exists
-        for rule in chain.rules:
-            for match in rule.matches:
-                # Fetch entries in db and then modify data
-                if entry_status:
+                if not match.sport:
                     port_number = str(match.dport)
-                    # In bytes
-                    RX = rule.get_counters()[1] + entry[port_number]["RX"]
-                    TX = entry[port_number]["TX"]
-
-                    collection.update({"Name": group["Name"],
-                                       "Time": today_str},
-                                      {"$set":
-                                       {port_number: {"TX": TX, "RX": RX}}
-                                       })
+                    rule_type = "RX"
                 else:
                     port_number = str(match.sport)
-                    RX = rule.get_counters()[1]
-                    TX = 0
-                    collection.insert({"Name": group["Name"],
-                                       "Time": today_str,
-                                       port_number: {"TX": TX, "RX": RX}
-                                       })
+                    rule_type = "TX"
+                entry = collection.find_one(
+                    {"Name": group["Name"], "Time": today_str})
+                if port_number in entry.keys():
+                    # Counters in bytes
+                    if rule_type == "TX":
+                        # Fetch entries in db
+                        entry = collection.find_one(
+                            {"Name": group["Name"], "Time": today_str})
+                        TX = rule.get_counters()[1] + entry[port_number]["TX"]
+                        RX = entry[port_number]["RX"]
+                        logging.debug(
+                            "This record is TX " + str(TX) + " for " + port_number)
+                        # Modify data in db
+                        collection.update({"Name": group["Name"],
+                                           "Time": today_str},
+                                          {"$set":
+                                           {port_number: {
+                                               "TX": int(TX), "RX": int(RX)}}
+                                           }
+                                          )
+                    else:
+                        entry = collection.find_one(
+                            {"Name": group["Name"], "Time": today_str})
+                        # Fetch entries in db
+                        RX = rule.get_counters()[1] + entry[port_number]["RX"]
+                        TX = entry[port_number]["TX"]
+                        logging.debug(
+                            "This record is RX " + str(RX) + " for " + port_number)
+                        collection.update({"Name": group["Name"],
+                                           "Time": today_str},
+                                          {"$set":
+                                           {port_number: {
+                                               "TX": int(TX), "RX": int(RX)}}
+                                           }
+                                          )
+
+    chain.zero_counters()
+
+
+def migrate_db(group_list):
+    client = pymongo.MongoClient('mongodb://localhost:27017/')
+    db = client['tcpstat']
+    collection = db['accounting']
+    today_str = str(datetime.date.today())
+    for group in group_list:
+        entry = collection.find_one({"Name": group["Name"], "Time": today_str})
+        if entry:
+            logging.info("Find an existing entry. Let's migrate it.")
+            for port in group["Port"]:
+                if str(port) not in entry.keys():
+                    collection.update({"Name": group["Name"], "Time": today_str},
+                                      {"$set": {str(port): {"TX": 0, "RX": 0}}})
+
+        else:
+            logging.info("Create a new entry with new schema.")
+            temp_dict = {}
+            temp_dict.update({"Name": group["Name"], "Time": today_str})
+            for port in group["Port"]:
+                temp_dict.update({str(port): {"TX": 0, "RX": 0}})
+            collection.insert(temp_dict)
 
 
 def main():
@@ -239,6 +260,8 @@ def main():
                        action="store_true")
     group.add_argument("-u", "--update", help="Update db with latest data.",
                        action="store_true")
+    group.add_argument("-m", "--migrate", help="Migrate db with new config.",
+                       action="store_true")
 
     # Parse command line argument.
     args = parser.parse_args()
@@ -254,6 +277,9 @@ def main():
 
     if args.update:
         update_db(read_config(find_config(args)))
+
+    if args.migrate:
+        migrate_db(read_config(find_config(args)))
 
     logging.info("Exit.")
 
