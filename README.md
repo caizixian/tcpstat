@@ -1,6 +1,8 @@
 # Tcpstat
 
 A TCP port traffic monitor written in Python.
+[![Latest Version](https://pypip.in/version/tcpstat/badge.svg?text=pypi)](https://pypi.python.org/pypi/tcpstat/)
+[![Downloads](https://pypip.in/download/tcpstat/badge.svg)](https://pypi.python.org/pypi/tcpstat/)
 [![Scrutinizer Code Quality](https://scrutinizer-ci.com/g/caizixian/tcpstat/badges/quality-score.png?b=master)](https://scrutinizer-ci.com/g/caizixian/tcpstat/?branch=master)
 [![Build Status](https://scrutinizer-ci.com/g/caizixian/tcpstat/badges/build.png?b=master)](https://scrutinizer-ci.com/g/caizixian/tcpstat/build-status/master)
 
