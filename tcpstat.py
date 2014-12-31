@@ -28,6 +28,7 @@ import os
 import sys
 import argparse
 import logging
+import datetime
 
 __author__ = 'Ivan Cai'
 __version__ = '0.0.1'
@@ -45,26 +46,40 @@ except ImportError:
     sys.exit("You don't have the required Python packages installed.")
 
 
+def get_version():
+    """Return a list which contains version number. Order is major, minor, micro."""
+    return __version__.split()
+
+
 def check_python():
+    """Check whether user's Python version meets our requirements."""
     info = sys.version_info
     if info[0] == 2 and not info[1] >= 6:
-        sys.exit('Python 2.6+ required')
+        sys.exit("Python 2.6+ required'")
     elif info[0] == 3 and not info[1] >= 3:
-        sys.exit('Python 3.3+ required')
+        sys.exit("Python 3.3+ required")
     elif info[0] not in [2, 3]:
-        sys.exit('Python version not supported')
+        sys.exit("Python version not supported")
 
 
 def check_root():
+    """Check whether user run our script using root privilege."""
     if not os.geteuid() == 0:
         sys.exit("You need to have root privileges to run this script.")
 
 
-def init():
-    pass
+def init(group_list):
+    with open("/etc/tcpstat.sh", "w") as iptables_init_script:
+        for group in group_list:
+            for port in group["Port"]:
+                iptables_init_script.write(
+                    "/sbin/iptables -A INPUT -p tcp --dport " + str(port) + "\n")
+                iptables_init_script.write(
+                    "/sbin/iptables -A OUTPUT -p tcp --sport " + str(port) + "\n")
 
 
 def find_config(args):
+    """Find user's path of config file."""
     if args.config == None and os.path.exists("/etc/tcpstat/config"):
         return "/etc/tcpstat/config"
     elif os.path.exists(args.config):
@@ -73,37 +88,174 @@ def find_config(args):
         return None
 
 
-def check_config(path):
+def check_port_validity(port):
+    """Check whether a port is valid."""
+    if 0 <= int(port) <= 65535:
+        return True
+    else:
+        return False
+
+
+def read_config(path):
+    """Check whether the path of config file is valid."""
     if path == None:
         sys.exit("Config file doesn't exist.")
     else:
-        pass
-        # TODO
+        config = configparser.ConfigParser()
+        config.read(path)
+
+        logging.info("Config file loaded.")
+
+        groupname_list = config.get("Groups", "Name").split(",")
+        group_list = []
+        for groups in groupname_list:
+            # In config file
+            # [Gp1]
+            # Port:-1,2,65534-65537
+            # Webhook:http://localhost/api/v1/tcpstats
+            # To
+            # {"Name": "Gp1", "Port": [2,65534,65535], "Webhook": "http://localhost/api/v1/tcpstats"}
+            logging.debug("Loading Group " + groups)
+            temp_dict = {"Name": groups}
+            port_list = []
+            logging.debug(config.get(groups, "Port"))
+            logging.debug(config.get(groups, "Port").split(","))
+            for port_str in config.get(groups, "Port").split(","):
+                logging.debug("Catch a port str " + port_str)
+                if '-' not in port_str:
+                    if port_str.isdigit() and check_port_validity(port_str):
+                        logging.debug("Appended a port " + port_str)
+                        port_list.append(int(port_str))
+                    else:
+                        logging.error("You entered " + port_str +
+                                      " which is not valid port number.")
+                else:
+                    logging.debug("Catch a port range " + port_str)
+                    head = int(port_str.split('-')[0])
+                    tail = int(port_str.split('-')[1])
+                    map(port_list.append,
+                        filter(check_port_validity, range(head, tail + 1)))
+            temp_dict.update({"Port": port_list})
+            temp_dict.update({"Webhook": config.get(groups, 'Webhook', '')})
+            group_list.append(temp_dict)
+        logging.debug("Final list of groups")
+        logging.debug(group_list)
+        return group_list
+
+
+def update_db(group_list):
+    table = iptc.Table(iptc.Table.FILTER)
+    client = pymongo.MongoClient('mongodb://localhost:27017/')
+    db = client['tcpstat']
+    collection = db['accounting']
+    today_str = str(datetime.date.today())
+
+    logging.info("Connect to db")
+
+    chain = iptc.Chain(table, 'OUTPUT')
+    for group in group_list:
+        entry = collection.find_one({"Name": group["Name"], "Time": today_str})
+        if entry:
+            entry_status = True  # Entry exists
+            logging.info("Find an existing entry.")
+        else:
+            entry_status = False  # Entry doesn't exists
+            logging.info("Doesn't find an existing entry.")
+        for rule in chain.rules:
+            for match in rule.matches:
+                # Fetch entries in db and then modify data
+                if entry_status:
+                    port_number = str(match.sport)
+                    # In bytes
+                    TX = rule.get_counters()[1] + entry[port_number]["TX"]
+                    RX = entry[port_number]["RX"]
+
+                    collection.update({"Name": group["Name"],
+                                       "Time": today_str},
+                                      {"$set":
+                                       {port_number: {"TX": TX, "RX": RX}}
+                                       })
+                else:
+                    port_number = str(match.sport)
+                    TX = rule.get_counters()[1]
+                    RX = 0
+                    collection.insert({"Name": group["Name"],
+                                       "Time": today_str,
+                                       port_number: {"TX": TX, "RX": RX}
+                                       })
+
+    chain = iptc.Chain(table, 'INPUT')
+    for group in group_list:
+        entry = collection.find_one({"Name": group["Name"], "Time": today_str})
+        if entry:
+            entry_status = True  # Entry exists
+        else:
+            entry_status = False  # Entry doesn't exists
+        for rule in chain.rules:
+            for match in rule.matches:
+                # Fetch entries in db and then modify data
+                if entry_status:
+                    port_number = str(match.dport)
+                    # In bytes
+                    RX = rule.get_counters()[1] + entry[port_number]["RX"]
+                    TX = entry[port_number]["TX"]
+
+                    collection.update({"Name": group["Name"],
+                                       "Time": today_str},
+                                      {"$set":
+                                       {port_number: {"TX": TX, "RX": RX}}
+                                       })
+                else:
+                    port_number = str(match.sport)
+                    RX = rule.get_counters()[1]
+                    TX = 0
+                    collection.insert({"Name": group["Name"],
+                                       "Time": today_str,
+                                       port_number: {"TX": TX, "RX": RX}
+                                       })
 
 
 def main():
-    check_python()
+    # Check whether user run our script using root privilege.
     check_root()
+    # Check whether user's Python version meets our requirements.
+    check_python()
 
+    # Setting up logging module.
+    logging.basicConfig(filename='/var/log/tcpstat.log',
+                        format='%(asctime)s %(levelname)s: %(message)s',
+                        level=logging.DEBUG)
+
+    logging.info(" ".join(("Started. Version:", __version__)))
+
+    # Init command line argument.
     parser = argparse.ArgumentParser()
-
     parser.add_argument("-c", "--config", type=str,
                         help="Path of config file. Default /etc/tcpstat/config")
-
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-v", "--version", help="Show version.",
                        action="store_true")
     group.add_argument("-i", "--init", help="Init iptables rules.",
                        action="store_true")
+    group.add_argument("-u", "--update", help="Update db with latest data.",
+                       action="store_true")
 
+    # Parse command line argument.
     args = parser.parse_args()
 
+    # Do when accept -v
     if args.version:
-        print(__version__)
+        print(" ".join(("Tcpstat\nVersion:", __version__)))
 
+    # Do when accept -i
+    # Init rules in /etc/tcpstat.sh which will be included in /etc/rc.local
     if args.init:
-        check_config(find_config(args))
-        init()
+        init(read_config(find_config(args)))
+
+    if args.update:
+        update_db(read_config(find_config(args)))
+
+    logging.info("Exit.")
 
 if __name__ == "__main__":
     main()
