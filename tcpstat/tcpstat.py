@@ -29,9 +29,10 @@ import sys
 import argparse
 import logging
 import datetime
+import json
 
 __author__ = 'Ivan Cai'
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 
 # The ConfigParser module has been renamed to configparser in Python 3.
 try:
@@ -55,7 +56,7 @@ def check_python():
     """Check whether user's Python version meets our requirements."""
     info = sys.version_info
     if info[0] == 2 and not info[1] >= 6:
-        sys.exit("Python 2.6+ required'")
+        sys.exit("Python 2.6+ required")
     elif info[0] == 3 and not info[1] >= 3:
         sys.exit("Python 3.3+ required")
     elif info[0] not in [2, 3]:
@@ -154,8 +155,15 @@ def read_config(path):
         logging.debug(group_list)
         return group_list
 
+def check_migration_lock():
+    if os.path.exists("/var/lock/tcpstat.lock"):
+        logging.error("Migration lock found. Quit.")
+        sys.exit("Migration lock found. Quit.")
 
 def update_db(group_list):
+
+    check_migration_lock()
+
     table = iptc.Table(iptc.Table.FILTER)
     client = pymongo.MongoClient('mongodb://localhost:27017/')
     db = client['tcpstat']
@@ -163,6 +171,11 @@ def update_db(group_list):
     today_str = str(datetime.date.today())
 
     logging.info("Connect to db")
+
+    if not collection.find_one({"Name": group["Name"], "Time": today_str}):
+        migrate_db(group_list)
+
+    check_migration_lock()
 
     chain = iptc.Chain(table, 'ACCT')
     for group in group_list:
@@ -214,6 +227,8 @@ def update_db(group_list):
 
 
 def migrate_db(group_list):
+    #Migration lock
+    open('/var/lock/tcpstat.lock', 'a').close()
     client = pymongo.MongoClient('mongodb://localhost:27017/')
     db = client['tcpstat']
     collection = db['accounting']
@@ -234,6 +249,8 @@ def migrate_db(group_list):
             for port in group["Port"]:
                 temp_dict.update({str(port): {"TX": 0, "RX": 0}})
             collection.insert(temp_dict)
+    #Remove migration lock
+    os.remove('/var/lock/tcpstat.lock')
 
 
 def main():
@@ -266,11 +283,9 @@ def main():
     # Parse command line argument.
     args = parser.parse_args()
 
-    # Do when accept -v
     if args.version:
         print(" ".join(("Tcpstat\nVersion:", __version__)))
 
-    # Do when accept -i
     # Init rules in /etc/tcpstat.sh which will be included in /etc/rc.local
     if args.init:
         init(read_config(find_config(args)))
