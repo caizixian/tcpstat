@@ -49,7 +49,7 @@ except ImportError:
 
 def get_version():
     """Return a list which contains version number. Order is major, minor, micro."""
-    return __version__.split()
+    return __version__.split('.')
 
 
 def check_python():
