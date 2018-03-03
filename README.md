@@ -3,7 +3,6 @@
 A TCP port traffic monitor written in Python.
 
 [![Latest Version](https://img.shields.io/pypi/v/tcpstat.svg?label=pypi)](https://pypi.python.org/pypi/tcpstat/)
-[![Downloads](https://img.shields.io/pypi/dm/tcpstat.svg
 [![Scrutinizer Code Quality](https://scrutinizer-ci.com/g/caizixian/tcpstat/badges/quality-score.png?b=master)](https://scrutinizer-ci.com/g/caizixian/tcpstat/?branch=master)
 
 ## Dependencies:
